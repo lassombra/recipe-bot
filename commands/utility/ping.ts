@@ -1,6 +1,7 @@
 import {SlashCommandBuilder, ChatInputCommandInteraction} from 'discord.js';
+import type { Command } from '../../command.js';
 
-export default {
+const command: Command = {
     data: new SlashCommandBuilder()
         .setName('ping')
         .setDescription('Replies with Pong!'),
@@ -8,3 +9,4 @@ export default {
         await interaction.reply('Pong!');
     },
 };
+export default command;
