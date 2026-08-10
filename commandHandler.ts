@@ -25,16 +25,21 @@ export default async function initializeCommands():Promise<void> {
     }
 
     client.on(Events.InteractionCreate, async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
+        if (!interaction.isChatInputCommand()) return;
 
-    const command = client.commands?.get(interaction.commandName);
-    if (!command) return;
+        const command = client.commands?.get(interaction.commandName);
+        if (!command) return;
 
-    try {
-        await command(interaction);
-    } catch (error) {
-        console.error(error);
-        await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
-    }
+        if (command.requiresSuperAdmin && interaction.user.id !== process.env.SUPER_ADMIN_USER) {
+            await interaction.reply({ content: 'You do not have permission to execute this command!', ephemeral: true });
+            return;
+        }
+
+        try {
+            await command(interaction);
+        } catch (error) {
+            console.error(error);
+            await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+        }
     });
 }
