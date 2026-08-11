@@ -23,10 +23,9 @@ export const ingredients = sqliteTable('ingredients', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   guildId: text('guild_id'), // NULL if shared/global
   name: text('name').notNull(),
-  defaultUnit: text('default_unit'),
   isShared: integer('is_shared', { mode: 'boolean' }).default(false).notNull(),
   isPendingApproval: integer('is_pending_approval', { mode: 'boolean' }).default(false).notNull(),
-  submittedByUserId: text('submitted_by_user_id').notNull(),
+  submittedByUserId: text('submitted_by_user_id'),
   approvedByUserId: text('approved_by_user_id').references(() => botAdminUsers.userId),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
