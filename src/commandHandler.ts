@@ -4,32 +4,17 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import client from './index.js';
 import { Collection, Events, MessageFlags } from 'discord.js';
 import { Command } from './command.js';
+import { loadAllCommands } from './loaders/commandLoader.js';
 
 export default async function initializeCommands():Promise<void> {
 
     client.commands = new Collection();
     const subCommandHandlers = new Collection<string, Command>();
-
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-    const foldersPath = join(__dirname, 'commands');
-
-    for (const folder of readdirSync(foldersPath)) {
-    const commandFiles = readdirSync(join(foldersPath, folder))
-        .filter(f => (f.endsWith('.ts') || f.endsWith('.js')) && !f.endsWith('.d.ts'));
-
-        for (const file of commandFiles) {
-            const filePath = join(foldersPath, folder, file);
-            const module = await import(pathToFileURL(filePath).href);
-            for (const exportName in module) {
-                const exportedItem = module[exportName];
-                if (exportedItem.prototype && exportedItem.prototype instanceof Command) {
-                    const commandInstance = new exportedItem() as Command;
-                    client.commands.set(commandInstance.data.name, commandInstance);
-                    if (commandInstance.buttonPrefix) {
-                        subCommandHandlers.set(commandInstance.buttonPrefix, commandInstance);
-                    }
-                }
-            }
+    const commandInstances = loadAllCommands();
+    for (const commandInstance of commandInstances) {
+        client.commands.set(commandInstance.data.name, commandInstance);
+        if (commandInstance.buttonPrefix) {
+            subCommandHandlers.set(commandInstance.buttonPrefix, commandInstance);
         }
     }
 

@@ -45,7 +45,7 @@ const getInputEntries = () => {
 const nativeCopyPlugin = () => ({
   name: 'native-copy-plugin',
   closeBundle() {
-    const srcDrizzle = path.resolve(__dirname, 'drizzle');
+    const srcDrizzle = path.resolve(__dirname, 'src/drizzle');
     const destDrizzle = path.resolve(__dirname, 'dist', 'drizzle');
 
     if (fs.existsSync(srcDrizzle)) {
