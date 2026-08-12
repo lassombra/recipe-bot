@@ -66,7 +66,9 @@ export default defineConfig({
     outDir: 'dist',       // Where your compiled JS files will go
     minify: false,        // Keep false during transition for easier debugging
     rollupOptions: {
-      input: getInputEntries(),
+      input: {
+        index: 'src/index.ts', // Back to a single entry point!
+      },
       output: {
         format: 'esm',              // Output standard ECMAScript Modules
         entryFileNames: '[name].js',

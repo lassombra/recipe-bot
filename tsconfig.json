@@ -10,7 +10,9 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "target": "esnext",
-    "types": [],
+    "types": [
+      "vite/client"
+    ],
     // For nodejs:
     // "lib": ["esnext"],
     // "types": ["node"],
