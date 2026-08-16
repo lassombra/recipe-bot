@@ -1,58 +1,80 @@
-import { readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import client from './index.js';
-import { Collection, Events, MessageFlags } from 'discord.js';
+import { InteractionResponseType, MessageFlags, type APIChatInputApplicationCommandInteraction } from 'discord.js';
 import { Command } from './command.js';
 import { loadAllCommands } from './loaders/commandLoader.js';
+import type { FastifyReply } from 'fastify';
+import type { Defer, Respond } from './server.js';
 
-export default async function initializeCommands():Promise<void> {
+interface CommandHandlers {
+    commandHandlers: Map<string, Command>;
+    subCommandHandlers: Map<string, Command>;
+}
 
-    client.commands = new Collection();
-    const subCommandHandlers = new Collection<string, Command>();
+let commands: CommandHandlers | null = null;
+
+function initializeCommands(): void {
+    const subCommandHandlers = new Map<string, Command>();
     const commandInstances = loadAllCommands();
+    const commandHandlers = new Map<string, Command>();
     for (const commandInstance of commandInstances) {
-        client.commands.set(commandInstance.data.name, commandInstance);
+        commandHandlers.set(commandInstance.data.name, commandInstance);
         if (commandInstance.buttonPrefix) {
             subCommandHandlers.set(commandInstance.buttonPrefix, commandInstance);
         }
     }
-
-    client.on(Events.InteractionCreate, async (interaction) => {
-        if (interaction.isButton()) {
-            const prefix = interaction.customId.split(':')[0];
-            const handler = subCommandHandlers.get(prefix ?? '');
-            if (!prefix || !handler) {
-                await interaction.update({ content: 'No handler found for this button interaction.'});
-                return;
-            }
-            try {
-                await handler.handleButton(interaction);
-            } catch (error) {
-                console.error(error);
-                await interaction.update({ content: 'There was an error while executing this action!' });
-            }
-            return;
-        }
-
-        if (!interaction.isChatInputCommand()) return;
-
-        const command = client.commands?.get(interaction.commandName);
-        if (!command) {
-            await interaction.reply({ content: 'Command not found.', flags: MessageFlags.Ephemeral });
-            return;
-        }
-
-        if (command.requiresSuperAdmin && interaction.user.id !== process.env.SUPER_ADMIN_USER) {
-            await interaction.reply({ content: 'You do not have permission to execute this command!', flags: MessageFlags.Ephemeral });
-            return;
-        }
-
-        try {
-            await command.handleCommand(interaction);
-        } catch (error) {
-            console.error(error);
-            await interaction.reply({ content: 'There was an error while executing this command!', flags: MessageFlags.Ephemeral });
-        }
-    });
+    commands = {commandHandlers, subCommandHandlers};
 }
+
+function getCommands(): CommandHandlers {
+    if (!commands) {
+        initializeCommands();
+    }
+    return commands!;
+}
+
+export async function handleSlashCommand(interaction: APIChatInputApplicationCommandInteraction, respond: Respond, defer: Defer) : Promise<void> {
+    if (!getCommands().commandHandlers.has(interaction.data.name)) {
+        respond({ content: 'Command not found!', flags: MessageFlags.Ephemeral });
+        return;
+    }
+
+    const command = getCommands().commandHandlers.get(interaction.data.name)!;
+    await command.handleCommand(interaction, respond, defer);
+}
+
+    // client.on(Events.InteractionCreate, async (interaction) => {
+    //     if (interaction.isButton()) {
+    //         const prefix = interaction.customId.split(':')[0];
+    //         const handler = subCommandHandlers.get(prefix ?? '');
+    //         if (!prefix || !handler) {
+    //             await interaction.update({ content: 'No handler found for this button interaction.'});
+    //             return;
+    //         }
+    //         try {
+    //             await handler.handleButton(interaction);
+    //         } catch (error) {
+    //             console.error(error);
+    //             await interaction.update({ content: 'There was an error while executing this action!' });
+    //         }
+    //         return;
+    //     }
+
+    //     if (!interaction.isChatInputCommand()) return;
+
+    //     const command = client.commands?.get(interaction.commandName);
+    //     if (!command) {
+    //         await interaction.reply({ content: 'Command not found.', flags: MessageFlags.Ephemeral });
+    //         return;
+    //     }
+
+    //     if (command.requiresSuperAdmin && interaction.user.id !== process.env.SUPER_ADMIN_USER) {
+    //         await interaction.reply({ content: 'You do not have permission to execute this command!', flags: MessageFlags.Ephemeral });
+    //         return;
+    //     }
+
+    //     try {
+    //         await command.handleCommand(interaction);
+    //     } catch (error) {
+    //         console.error(error);
+    //         await interaction.reply({ content: 'There was an error while executing this command!', flags: MessageFlags.Ephemeral });
+    //     }
+    // });

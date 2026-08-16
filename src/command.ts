@@ -1,4 +1,6 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, ButtonInteraction, ModalSubmitInteraction, MessageFlags, type InteractionUpdateOptions, type InteractionReplyOptions, MessagePayload } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, ButtonInteraction, ModalSubmitInteraction, MessageFlags, type InteractionUpdateOptions, type InteractionReplyOptions, MessagePayload, InteractionResponseType, type APIChatInputApplicationCommandInteraction, type APIChatInputApplicationCommandDMInteraction, type APIChatInputApplicationCommandGuildInteraction } from 'discord.js';
+import type { FastifyReply } from 'fastify';
+import type { Defer, Respond } from './server.js';
 
 export abstract class Command {
     abstract data: SlashCommandBuilder;
@@ -12,17 +14,17 @@ export abstract class Command {
         }
         await this.internalHandleButton(interaction);
     }
-    async handleCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+    async handleCommand(interaction: APIChatInputApplicationCommandInteraction, respond: Respond, defer: Defer): Promise<void> {
         if (!(await this.isCommandAllowed(interaction))) {
-            await interaction.reply({ content: this.disallowedMessage(interaction), flags: MessageFlags.Ephemeral });
+            respond({ content: this.disallowedMessage(interaction), flags: MessageFlags.Ephemeral }); 
             return;
         }
-        await this.internalHandleCommand(interaction);
+        return this.internalHandleCommand(interaction, respond, defer);
     }
     private getSubCommandId(interaction: ButtonInteraction | ModalSubmitInteraction): string {
         return interaction.customId.split(this.buttonPrefix ?? '')[1]?.split(':')[1] ?? '';
     }
-    protected async isCommandAllowed(interaction: ChatInputCommandInteraction): Promise<boolean> {
+    protected async isCommandAllowed(interaction: APIChatInputApplicationCommandInteraction): Promise<boolean> {
         return true;
     }
     protected async isButtonAllowed(interaction: ButtonInteraction, buttonId: string): Promise<boolean> {
@@ -31,11 +33,17 @@ export abstract class Command {
     protected async isModalAllowed(interaction: ModalSubmitInteraction, modalId: string): Promise<boolean> {
         return true;
     }
-    protected isSuperUser(interaction: ChatInputCommandInteraction): boolean {
-        return interaction.user.id === process.env.SUPER_ADMIN_USER;
+    protected isSuperUser(interaction: APIChatInputApplicationCommandInteraction): boolean {
+        if (interaction.guild_id === undefined) {
+            const dmInteraction = interaction as APIChatInputApplicationCommandDMInteraction;
+            return dmInteraction.user.id === process.env.SUPER_ADMIN_USER;
+        } else {
+            const guildInteraction = interaction as APIChatInputApplicationCommandGuildInteraction;
+            return guildInteraction.member?.user.id === process.env.SUPER_ADMIN_USER;
+        }
     }
-    protected async internalHandleCommand(interaction: ChatInputCommandInteraction): Promise<void> {
-        await interaction.reply({ content: 'This command has not been implemented yet.', flags: MessageFlags.Ephemeral });
+    protected async internalHandleCommand(interaction: APIChatInputApplicationCommandInteraction, respond: Respond, defer: Defer): Promise<void> {
+        respond({ content: 'This command has not been implemented yet.', flags: MessageFlags.Ephemeral });
     }
     protected async internalHandleButton(interaction: ButtonInteraction): Promise<void> {
         const buttonId = this.getSubCommandId(interaction);
@@ -46,7 +54,7 @@ export abstract class Command {
         }
         await interaction.update({ content: 'This button has not been implemented yet.', components: [] });
     }
-    protected disallowedMessage(interaction: ChatInputCommandInteraction) {
+    protected disallowedMessage(interaction: APIChatInputApplicationCommandInteraction) {
         return 'You do not have permission to use this command.';
     }
     protected disallowedButtonMessage(interaction: ButtonInteraction) {

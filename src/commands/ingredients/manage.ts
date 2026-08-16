@@ -13,29 +13,35 @@ import {
     TextInputStyle,
     ModalBuilder,
     LabelBuilder,
+    type APIChatInputApplicationCommandInteraction,
+    InteractionResponseType,
+    ContainerBuilder,
+    TextDisplayBuilder,
 } from 'discord.js';
 import { eq, and, inArray, count, or, isNull } from 'drizzle-orm';
 import { Command, type Button } from '../../command.js';
 import { db } from '../../db/index.js';
 import { guildPermissions, ingredients } from '../../db/schema.js';
+import type { FastifyReply } from 'fastify';
+import { editResponse } from '../../client.js';
+import type { Defer, Respond } from '../../server.js';
 
-async function hasIngredientPermission(interaction: ChatInputCommandInteraction | ButtonInteraction): Promise<boolean> {
-    if (!interaction.guildId || !interaction.member) return false;
+async function hasIngredientPermission(interaction: APIChatInputApplicationCommandInteraction): Promise<boolean> {
+    if (!interaction.guild_id || !interaction.member) return false;
 
-    if (interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return true;
+    if ((BigInt(interaction.member?.permissions ?? 0) & BigInt(PermissionFlagsBits.Administrator)) === BigInt(PermissionFlagsBits.Administrator)) return true;
 
     const roles = interaction.member.roles;
-    const roleIds: string[] = Array.isArray(roles) ? roles : [...roles.cache.keys()];
-    if (roleIds.length === 0) return false;
+    if (roles.length === 0) return false;
 
     const matching = await db
         .select()
         .from(guildPermissions)
         .where(
             and(
-                eq(guildPermissions.guildId, interaction.guildId),
+                eq(guildPermissions.guildId, interaction.guild_id),
                 eq(guildPermissions.permissionType, 'manage_recipes'),
-                inArray(guildPermissions.roleId, roleIds),
+                inArray(guildPermissions.roleId, roles),
             ),
         );
 
@@ -54,22 +60,39 @@ export class Ingredients extends Command {
         this.buttons.set('add', new AddIngredientButton());
         this.buttons.set('list', new ListIngredients());
     }
-    protected async isCommandAllowed(interaction: ChatInputCommandInteraction) {
-        return !!interaction.guildId && hasIngredientPermission(interaction);
+    protected async isCommandAllowed(interaction: APIChatInputApplicationCommandInteraction) {
+        return !!interaction.guild_id && hasIngredientPermission(interaction);
     }
     protected async isButtonAllowed(interaction: ButtonInteraction) {
-        return !!interaction.guildId && hasIngredientPermission(interaction);
+        // return !!interaction.guildId && hasIngredientPermission(interaction);
+        return false;
     }
-    protected async internalHandleCommand(interaction: ChatInputCommandInteraction) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    protected async internalHandleCommand(interaction: APIChatInputApplicationCommandInteraction, respond: Respond, defer: Defer) : Promise<void> {
+        defer({ flags: MessageFlags.Ephemeral });
 
-        await interaction.editReply({
-            content: 'What would you like to do with ingredients?',
-            components: [baseButtonRow()],
+        const components = [
+            new ContainerBuilder()
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder()
+                        .setContent('Ingredients Management')
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder()
+                        .setContent('What would you like to do with ingredients?')
+                )
+                .addActionRowComponents(
+                    baseButtonRow()
+                )
+                .toJSON()
+        ];
+        await editResponse(interaction, {
+            components,
+            flags: MessageFlags.IsComponentsV2
         });
+        return;
     }
-    protected disallowedMessage(interaction: ChatInputCommandInteraction) {
-        if (!interaction.guildId) {
+    protected disallowedMessage(interaction: APIChatInputApplicationCommandInteraction) {
+        if (!interaction.guild_id) {
             return 'This command must be run from within a server.';
         } else {
             return 'You do not have permission to manage ingredients. You need the `manage_recipes` role permission or server administrator rights.';
