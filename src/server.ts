@@ -1,11 +1,8 @@
-import { type APIInteraction, InteractionType, type APIPingInteraction, InteractionResponseType, MessageFlags, type APIApplicationCommandInteraction, type APIChatInputApplicationCommandInteraction, type APIInteractionResponseCallbackData } from 'discord.js';
-import Fastify from 'fastify';
+import { type APIInteraction, InteractionType, type APIPingInteraction, InteractionResponseType, MessageFlags, type APIApplicationCommandInteraction, type APIChatInputApplicationCommandInteraction, type APIInteractionResponseCallbackData, type APIModalInteractionResponseCallbackData, ComponentType, type APIMessageComponentButtonInteraction } from 'discord.js';
+import Fastify, { type FastifyReply } from 'fastify';
 // import initializeCommands from './commandHandler.js';
 import { verifyKey } from 'discord-interactions';
-import { handleSlashCommand } from './commandHandler.js';
-
-export type Respond = (data: APIInteractionResponseCallbackData) => void;
-export type Defer = (data: APIInteractionResponseCallbackData) => void;
+import { handleButtonInteraction, handleSlashCommand } from './commandHandler.js';
 
 const fastify = Fastify({logger: true});
 fastify.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
@@ -44,13 +41,13 @@ fastify.post('/interactions', async (request, reply) => {
     
     if (interaction.type === InteractionType.ApplicationCommand) {
         const applicationCommandInteraction = interaction as APIChatInputApplicationCommandInteraction;
-        function handleResponse(data: APIInteractionResponseCallbackData) {
-            reply.send({ type: InteractionResponseType.ChannelMessageWithSource, data });
-        }
-        function defer(data: APIInteractionResponseCallbackData) {
-            reply.send({ type: InteractionResponseType.DeferredChannelMessageWithSource, data });
-        }
-        await handleSlashCommand(applicationCommandInteraction, handleResponse, defer);
+        await handleSlashCommand(applicationCommandInteraction, new APIResponder(reply));
+        return;
+    }
+
+    if (interaction.type === InteractionType.MessageComponent && interaction.data.component_type === ComponentType.Button) {
+        const buttonInteraction = interaction as APIMessageComponentButtonInteraction;
+        await handleButtonInteraction(buttonInteraction, new APIResponder(reply));
         return;
     }
     
@@ -65,5 +62,24 @@ export default async function main() {
         await fastify.listen({port: 3000, host: '0.0.0.0'});
     } catch (error) {
         console.error('Error starting server:', error);
+    }
+}
+
+export class APIResponder {
+    constructor(private reply: FastifyReply) {}
+    newMessage(data: APIInteractionResponseCallbackData) {
+        this.reply.send({ type: InteractionResponseType.ChannelMessageWithSource, data });
+    }
+    defer(data: APIInteractionResponseCallbackData) {
+        this.reply.send({ type: InteractionResponseType.DeferredChannelMessageWithSource, data });
+    }
+    deferUpdate(data?: APIInteractionResponseCallbackData) {
+        this.reply.send({ type: InteractionResponseType.DeferredMessageUpdate, data });
+    }
+    updateMessage(data: APIInteractionResponseCallbackData) {
+        this.reply.send({ type: InteractionResponseType.UpdateMessage, data });
+    }
+    modal(data: APIModalInteractionResponseCallbackData) {
+        this.reply.send({ type: InteractionResponseType.Modal, data });
     }
 }

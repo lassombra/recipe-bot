@@ -1,4 +1,4 @@
-import { REST, Routes, type APIChatInputApplicationCommandInteraction, type RESTPatchAPIWebhookWithTokenMessageJSONBody } from 'discord.js';
+import { REST, Routes, type APIChatInputApplicationCommandInteraction, type APIMessageComponentButtonInteraction, type RESTPatchAPIWebhookWithTokenMessageJSONBody } from 'discord.js';
 
 let rest: REST | undefined;
 
@@ -9,7 +9,7 @@ function initialize() {
     return rest;
 }
 
-export function editResponse(originalInteraction: APIChatInputApplicationCommandInteraction, content: RESTPatchAPIWebhookWithTokenMessageJSONBody) {
+export function editResponse(originalInteraction: APIChatInputApplicationCommandInteraction | APIMessageComponentButtonInteraction, content: RESTPatchAPIWebhookWithTokenMessageJSONBody) {
     const restClient = initialize();
     console.log('Editing response with content:', content);
     console.log({body: JSON.stringify(content)})

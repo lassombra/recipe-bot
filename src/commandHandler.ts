@@ -1,8 +1,8 @@
-import { InteractionResponseType, MessageFlags, type APIChatInputApplicationCommandInteraction } from 'discord.js';
+import { InteractionResponseType, MessageFlags, type APIChatInputApplicationCommandInteraction, type APIMessageComponentButtonInteraction } from 'discord.js';
 import { Command } from './command.js';
 import { loadAllCommands } from './loaders/commandLoader.js';
 import type { FastifyReply } from 'fastify';
-import type { Defer, Respond } from './server.js';
+import type { APIResponder } from './server.js';
 
 interface CommandHandlers {
     commandHandlers: Map<string, Command>;
@@ -31,14 +31,29 @@ function getCommands(): CommandHandlers {
     return commands!;
 }
 
-export async function handleSlashCommand(interaction: APIChatInputApplicationCommandInteraction, respond: Respond, defer: Defer) : Promise<void> {
+export async function handleSlashCommand(interaction: APIChatInputApplicationCommandInteraction, responder: APIResponder) : Promise<void> {
     if (!getCommands().commandHandlers.has(interaction.data.name)) {
-        respond({ content: 'Command not found!', flags: MessageFlags.Ephemeral });
+        responder.newMessage({ content: 'Command not found!', flags: MessageFlags.Ephemeral });
         return;
     }
 
     const command = getCommands().commandHandlers.get(interaction.data.name)!;
-    await command.handleCommand(interaction, respond, defer);
+    await command.handleCommand(interaction, responder); 
+}
+
+export async function handleButtonInteraction(interaction: APIMessageComponentButtonInteraction, responder: APIResponder): Promise<void> {
+    const prefix = interaction.data.custom_id.split(':')[0];
+    const handler = getCommands().subCommandHandlers.get(prefix ?? '');
+    if (!prefix || !handler) {
+        responder.newMessage({ content: 'No handler found for this button interaction.', flags: MessageFlags.Ephemeral });
+        return;
+    }
+    try {
+        await handler.handleButton(interaction, responder);
+    } catch (error) {
+        console.error(error);
+        responder.updateMessage({ content: 'There was an error while executing this action!', flags: MessageFlags.Ephemeral });
+    }
 }
 
     // client.on(Events.InteractionCreate, async (interaction) => {
