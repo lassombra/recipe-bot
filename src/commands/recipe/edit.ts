@@ -3,95 +3,22 @@ import {
     MessageFlags,
     InteractionContextType,
     ApplicationIntegrationType,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    ContainerBuilder,
     ModalBuilder,
     LabelBuilder,
-    TextDisplayBuilder,
     TextInputBuilder,
     TextInputStyle,
-    StringSelectMenuBuilder,
     type APIMessageComponentButtonInteraction,
     type APIMessageComponentSelectMenuInteraction,
     type APIModalSubmitInteraction,
-    SeparatorBuilder,
 } from 'discord.js';
 import type { APIChatInputApplicationCommandInteraction } from 'discord.js';
-import { and, asc, eq, sql } from 'drizzle-orm';
-import { db } from '../../db/index.js';
-import { recipes } from '../../db/schema.js';
 import { getModalInputValue } from '../../client.js';
 import { Command } from '../../command.js';
 import type { Button, Modal, Select } from '../../command.js';
 import type { APIResponder } from '../../server.js';
-
-type ContainerMessageBuilder = (container: ContainerBuilder) => void;
-
-interface BuildContainerMessageOptions {
-    text?: string;
-    row?: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>;
-    build?: ContainerMessageBuilder;
-}
-
-function buildContainerMessage(options: BuildContainerMessageOptions = {}) {
-    const { text, row, build } = options;
-    const container = new ContainerBuilder()
-        .addTextDisplayComponents(new TextDisplayBuilder().setContent("## Edit Recipes"))
-        .addSeparatorComponents(new SeparatorBuilder().setDivider(true));
-
-    if (build) {
-        build(container);
-    } else {
-        if (text) {
-            container.addTextDisplayComponents(new TextDisplayBuilder().setContent(text));
-        }
-
-        if (row) {
-            container.addActionRowComponents(row);
-        }
-    }
-
-    return {
-        components: [container.toJSON()],
-        flags: MessageFlags.IsComponentsV2,
-    };
-}
-
-function buildRecipeCard(recipe: { id: number; title: string; description: string | null }) {
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-            .setCustomId(`recipe_edit:add_step:${recipe.id}`)
-            .setLabel('Add Step')
-            .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-            .setCustomId(`recipe_edit:finish:${recipe.id}`)
-            .setLabel('Finish')
-            .setStyle(ButtonStyle.Secondary),
-    );
-
-    const description = recipe.description?.trim() ? recipe.description : 'No description provided.';
-    return buildContainerMessage({
-        build: (container) => {
-            container
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# ${recipe.title}`))
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${description}`))
-                .addSeparatorComponents(new SeparatorBuilder().setDivider(true))
-                .addActionRowComponents(row);
-        },
-    });
-}
-
-async function getRecipeForGuild(guildId: string, recipeId: number) {
-    const [recipe] = await db
-        .select({ id: recipes.id, title: recipes.title, description: recipes.description })
-        .from(recipes)
-        .where(and(eq(recipes.id, recipeId), eq(recipes.guildId, guildId)))
-        .limit(1);
-
-    return recipe;
-}
+import { EditRecipeCustomId } from './edit/ids.js';
+import { buildContainerMessage, buildRecipeCard, buildRecipeSelectRow, buildStartRow } from './edit/display.js';
+import { createRecipeForGuild, findRecipesForGuildPrefix, getRecipeForGuild } from './edit/data.js';
 
 export class EditRecipe extends Command {
     data = new SlashCommandBuilder()
@@ -113,16 +40,7 @@ export class EditRecipe extends Command {
     }
 
     protected async internalHandleCommand(interaction: APIChatInputApplicationCommandInteraction, responder: APIResponder): Promise<void> {
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder()
-                .setCustomId('recipe_edit:new')
-                .setLabel('New')
-                .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-                .setCustomId('recipe_edit:edit')
-                .setLabel('Edit')
-                .setStyle(ButtonStyle.Secondary),
-        );
+        const row = buildStartRow();
 
         responder.newMessage({
             ...buildContainerMessage({ text: 'What would you like to do?', row }),
@@ -136,7 +54,7 @@ class NewRecipeButton implements Button {
 
     async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder): Promise<void> {
         const modal = new ModalBuilder()
-            .setCustomId('recipe_edit:new_modal')
+            .setCustomId(EditRecipeCustomId.NewModal)
             .setTitle('Create New Recipe')
             .addLabelComponents(
                 new LabelBuilder()
@@ -210,7 +128,7 @@ class OpenEditRecipeModalButton implements Button {
 
     async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder): Promise<void> {
         const modal = new ModalBuilder()
-            .setCustomId(`recipe_edit:edit_modal`)
+            .setCustomId(EditRecipeCustomId.EditModal)
             .setTitle('Find Recipe To Edit')
             .addLabelComponents(
                 new LabelBuilder()
@@ -239,32 +157,14 @@ class EditRecipeModal implements Modal {
             return;
         }
 
-        const matchingRecipes = await db
-            .select({ id: recipes.id, title: recipes.title })
-            .from(recipes)
-            .where(and(
-                eq(recipes.guildId, guildId),
-                sql`lower(${recipes.title}) like ${`${recipePrefix}%`}`,
-            ))
-            .orderBy(asc(recipes.title))
-            .limit(25);
+        const { results: matchingRecipes } = await findRecipesForGuildPrefix(guildId, recipePrefix, 1, 25);
 
         if (matchingRecipes.length === 0) {
             responder.updateMessage(buildContainerMessage({ text: 'no recipe found' }));
             return;
         }
 
-        const select = new StringSelectMenuBuilder()
-            .setCustomId('recipe_edit:recipe_select')
-            .setPlaceholder('Select a recipe to edit')
-            .addOptions(
-                matchingRecipes.map((recipe) => ({
-                    label: recipe.title.slice(0, 100),
-                    value: recipe.id.toString(),
-                })),
-            );
-
-        const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
+        const row = buildRecipeSelectRow(matchingRecipes);
 
         responder.updateMessage(buildContainerMessage({ text: 'Select a recipe:', row }));
     }
@@ -284,15 +184,12 @@ class NewRecipeModal implements Modal {
             return;
         }
 
-        const [createdRecipe] = await db
-            .insert(recipes)
-            .values({
-                guildId,
-                title,
-                description: description.length > 0 ? description : null,
-                createdByUserId,
-            })
-            .returning({ id: recipes.id, title: recipes.title, description: recipes.description });
+        const createdRecipe = await createRecipeForGuild(
+            guildId,
+            createdByUserId,
+            title,
+            description.length > 0 ? description : null,
+        );
 
         if (!createdRecipe) {
             responder.updateMessage(buildContainerMessage({ text: 'Could not create recipe.' }));
