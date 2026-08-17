@@ -54,13 +54,14 @@ export const recipeInstructions = sqliteTable('recipe_instructions', {
 // --- RECIPE INGREDIENTS (Junction Table allowing duplicates) ---
 export const recipeIngredients = sqliteTable('recipe_ingredients', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  recipeId: integer('recipe_id')
+  recipeInstructionId: integer('recipe_instruction_id')
     .notNull()
-    .references(() => recipes.id, { onDelete: 'cascade' }),
+    .references(() => recipeInstructions.id, { onDelete: 'cascade' }),
   ingredientId: integer('ingredient_id')
     .notNull()
     .references(() => ingredients.id),
-  quantity: integer('quantity', { mode: 'number' }).notNull(), // Use real or number
+  quantityNumerator: integer('quantity_numerator').notNull(),
+  quantityDenominator: integer('quantity_denominator').notNull().default(1),
   unit: text('unit').notNull(),
   preparationNote: text('preparation_note'),
   sequenceOrder: integer('sequence_order').default(1).notNull(),
@@ -106,9 +107,9 @@ export const recipeInstructionsRelations = relations(recipeInstructions, ({ one 
 }));
 
 export const recipeIngredientsRelations = relations(recipeIngredients, ({ one }) => ({
-  recipe: one(recipes, {
-    fields: [recipeIngredients.recipeId],
-    references: [recipes.id],
+  recipeInstruction: one(recipeInstructions, {
+    fields: [recipeIngredients.recipeInstructionId],
+    references: [recipeInstructions.id],
   }),
   ingredient: one(ingredients, {
     fields: [recipeIngredients.ingredientId],

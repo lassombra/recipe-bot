@@ -15,6 +15,13 @@
       "when": 1786429879356,
       "tag": "0001_absurd_ser_duncan",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786931357777,
+      "tag": "0002_premium_terrax",
+      "breakpoints": true
     }
   ]
 }
