@@ -93,6 +93,7 @@ export abstract class Command {
             const customData = interaction.data.custom_id.split(modalId)[1]?.split(':')[1];
             return modal.handle(interaction, responder, customData);
         }
+        console.log('Modal not implemented:', modalId);
         responder.updateMessageText('This modal has not been implemented yet.');
     }
     protected async internalHandleSelect(interaction: APIMessageComponentSelectMenuInteraction, responder: APIResponder): Promise<void> {

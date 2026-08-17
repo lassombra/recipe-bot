@@ -7,5 +7,6 @@ export enum EditRecipeCustomId {
     FinishButtonPrefix = 'recipe_edit:finish',
     EditModal = 'recipe_edit:edit_modal',
     NewModal = 'recipe_edit:new_modal',
+    StepModal = 'recipe_edit:step_modal',
     RecipeSelect = 'recipe_edit:recipe_select',
 }

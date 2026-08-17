@@ -4,12 +4,13 @@ import {
     ButtonStyle,
     ContainerBuilder,
     MessageFlags,
+    SectionBuilder,
     SeparatorBuilder,
     StringSelectMenuBuilder,
     TextDisplayBuilder,
 } from 'discord.js';
 import { EditRecipeCustomId } from './ids.js';
-import type { RecipeCardData, RecipeSelectOption } from './data.js';
+import type { RecipeCardData, RecipeSelectOption, RecipeStepData } from './data.js';
 
 type ContainerMessageBuilder = (container: ContainerBuilder) => void;
 
@@ -116,13 +117,53 @@ export function buildRecipeCard(recipe: RecipeCardData) {
     );
 
     const description = recipe.description?.trim() ? recipe.description : 'No description provided.';
+    const steps = recipe.steps.map((step, index) => new SectionBuilder()
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`Step ${index + 1}: ${step.instruction}`)
+        ).setButtonAccessory(
+            new ButtonBuilder()
+                .setCustomId('not-implemented')
+                .setStyle(ButtonStyle.Secondary)
+                .setLabel('Edit')
+        )
+    );
     return buildContainerMessage({
         build: (container) => {
-            container
+            container = container
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# ${recipe.title}`))
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(description))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(description));
+            if (steps.length > 0) {
+                container = container.addSectionComponents(steps);
+            }            
+            container = container
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true))
                 .addActionRowComponents(row);
         },
     });
+}
+
+export function buildStepCard(step: RecipeStepData) {
+    return buildContainerMessage({
+        build: (container) => {
+            if (step.ingredients && step.ingredients.length > 0) {
+                container.addTextDisplayComponents(step.ingredients.map(ingredient => 
+                    new TextDisplayBuilder().setContent(`- ${ingredient.quantity} ${ingredient.unit} ${ingredient.name}${ingredient.preparation ? ` (${ingredient.preparation})` : ''}`)
+                ))
+            }
+            container.addSeparatorComponents(new SeparatorBuilder().setDivider(false));
+            container.addTextDisplayComponents(new TextDisplayBuilder().setContent(step.instruction));
+            container.addActionRowComponents(
+                new ActionRowBuilder<ButtonBuilder>().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`${EditRecipeCustomId.EditButton}:${step.id}`)
+                        .setLabel('Back To Recipe')
+                        .setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder()
+                        .setCustomId(`${EditRecipeCustomId.AddStepButtonPrefix}:${step.recipeId}`)
+                        .setLabel('Next Step')
+                        .setStyle(ButtonStyle.Primary),
+                )
+            );
+        }
+    })
 }

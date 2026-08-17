@@ -12,13 +12,13 @@ import {
     type APIModalSubmitInteraction,
 } from 'discord.js';
 import type { APIChatInputApplicationCommandInteraction } from 'discord.js';
-import { getModalInputValue } from '../../client.js';
+import { editResponse, getModalInputValue } from '../../client.js';
 import { Command } from '../../command.js';
 import type { Button, Modal, Select } from '../../command.js';
 import type { APIResponder } from '../../server.js';
 import { EditRecipeCustomId } from './edit/ids.js';
 import { buildContainerMessage, buildRecipeCard, buildRecipeSearchResultsMessage, buildStartRow } from './edit/display.js';
-import { createRecipeForGuild, findRecipesForGuildPrefix, getRecipeForGuild, updateRecipeForGuild } from './edit/data.js';
+import { addStepToRecipe, createRecipeForGuild, findRecipesForGuildPrefix, getRecipeForGuild, updateRecipeForGuild } from './edit/data.js';
 
 const RECIPE_SEARCH_PAGE_SIZE = 25;
 
@@ -80,6 +80,7 @@ export class EditRecipe extends Command {
         this.registerButton(new FinishRecipeButton());
         this.registerModal(new EditRecipeModal());
         this.registerModal(new NewRecipeModal());
+        this.registerModal(new StepModal());
         this.registerSelect(new EditRecipeSelect());
     }
 
@@ -207,8 +208,20 @@ class AddStepRecipeButton implements Button {
             responder.updateMessage(buildContainerMessage({ text: 'Recipe not found.' }));
             return;
         }
-
-        responder.updateMessage(buildRecipeCard(recipe));
+        const modal = new ModalBuilder()
+            .setCustomId(`${EditRecipeCustomId.StepModal}:${recipe.id}`)
+            .setTitle('Add Recipe Step')
+            .addLabelComponents(
+                new LabelBuilder()
+                    .setLabel('Step Instruction')
+                    .setTextInputComponent(
+                        new TextInputBuilder()
+                            .setCustomId('stepInstruction')
+                            .setStyle(TextInputStyle.Paragraph)
+                            .setRequired(true)
+                    )
+            )
+        responder.modal(modal.toJSON());
     }
 }
 
@@ -338,5 +351,44 @@ class EditRecipeSelect implements Select {
         }
 
         responder.updateMessage(buildRecipeCard(recipe));
+    }
+}
+
+class StepModal implements Modal {
+    prefix = 'step_modal';
+
+    async handle(interaction: APIModalSubmitInteraction, responder: APIResponder, customData?: string): Promise<void> {
+        const guildId = interaction.guild_id;
+        if (!guildId || !customData) {
+            responder.updateMessage(buildContainerMessage({ text: 'Could not add step.' }));
+            return;
+        }
+
+        const recipeId = Number(customData.split('~')[0]);
+        if (!Number.isInteger(recipeId) || recipeId <= 0) {
+            responder.updateMessage(buildContainerMessage({ text: 'Could not add step.' }));
+            return;
+        }
+
+        const stepInstruction = getModalInputValue(interaction.data.components, 'stepInstruction');
+        if (!stepInstruction) {
+            responder.updateMessage(buildContainerMessage({ text: 'Step instruction is required.' }));
+            return;
+        }
+
+        responder.deferUpdate();
+        const createdStep = await addStepToRecipe(recipeId, stepInstruction);
+        if (!createdStep) {
+            editResponse(interaction, buildContainerMessage({ text: 'Could not add step.' }));
+            return;
+        }
+
+        const updatedRecipe = await getRecipeForGuild(guildId, recipeId);
+        if (!updatedRecipe) {
+            editResponse(interaction, buildContainerMessage({ text: 'Recipe not found.' }));
+            return;
+        }
+
+        editResponse(interaction, buildRecipeCard(updatedRecipe));
     }
 }
