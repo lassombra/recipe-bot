@@ -1,8 +1,22 @@
-import { type APIInteraction, InteractionType, type APIPingInteraction, InteractionResponseType, MessageFlags, type APIApplicationCommandInteraction, type APIChatInputApplicationCommandInteraction, type APIInteractionResponseCallbackData, type APIModalInteractionResponseCallbackData, ComponentType, type APIMessageComponentButtonInteraction } from 'discord.js';
+import type { 
+    APIInteraction, 
+    APIPingInteraction, 
+    APIChatInputApplicationCommandInteraction, 
+    APIInteractionResponseCallbackData, 
+    APIModalInteractionResponseCallbackData,
+    APIMessageComponentButtonInteraction, 
+    APIModalSubmitInteraction } from 'discord.js';
+import {
+    InteractionType,
+    InteractionResponseType,
+    ComponentType,
+    MessageFlags,
+    TextDisplayBuilder,
+} from 'discord.js';
 import Fastify, { type FastifyReply } from 'fastify';
 // import initializeCommands from './commandHandler.js';
 import { verifyKey } from 'discord-interactions';
-import { handleButtonInteraction, handleSlashCommand } from './commandHandler.js';
+import { handleButtonInteraction, handleModalInteraction, handleSlashCommand } from './commandHandler.js';
 
 const fastify = Fastify({logger: true});
 fastify.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
@@ -50,6 +64,12 @@ fastify.post('/interactions', async (request, reply) => {
         await handleButtonInteraction(buttonInteraction, new APIResponder(reply));
         return;
     }
+
+    if (interaction.type === InteractionType.ModalSubmit) {
+        const modalInteraction = interaction as APIModalSubmitInteraction;
+        await handleModalInteraction(modalInteraction, new APIResponder(reply));
+        return;
+    }
     
     console.log(interaction);
     
@@ -75,6 +95,9 @@ export class APIResponder {
     }
     deferUpdate(data?: APIInteractionResponseCallbackData) {
         this.reply.send({ type: InteractionResponseType.DeferredMessageUpdate, data });
+    }
+    updateMessageText(data: string) {
+        return this.updateMessage({ components: [new TextDisplayBuilder().setContent(data).toJSON()], flags: MessageFlags.IsComponentsV2 });
     }
     updateMessage(data: APIInteractionResponseCallbackData) {
         this.reply.send({ type: InteractionResponseType.UpdateMessage, data });

@@ -17,12 +17,13 @@ import {
     type APIMessageComponentButtonInteraction,
     SeparatorBuilder,
     type RESTPatchAPIChannelMessageJSONBody,
+    type APIModalSubmitInteraction,
 } from 'discord.js';
 import { eq, and, inArray, count, or, isNull } from 'drizzle-orm';
-import { Command, type Button } from '../../command.js';
+import { Command, type Button, type Modal } from '../../command.js';
 import { db } from '../../db/index.js';
 import { guildPermissions, ingredients } from '../../db/schema.js';
-import { editResponse } from '../../client.js';
+import { editResponse, getModalInputValue } from '../../client.js';
 import type { APIResponder } from '../../server.js';
 
 async function hasIngredientPermission(interaction: APIChatInputApplicationCommandInteraction | APIMessageComponentButtonInteraction): Promise<boolean> {
@@ -56,8 +57,9 @@ export class Ingredients extends Command {
     buttonPrefix = 'ingredients';
     constructor() {
         super();
-        this.buttons.set('add', new AddIngredientButton());
-        this.buttons.set('list', new ListIngredients());
+        this.registerButton(new AddIngredientButton());
+        this.registerButton(new ListIngredients());
+        this.registerModal(new AddIngredientModal());
     }
     protected async isCommandAllowed(interaction: APIChatInputApplicationCommandInteraction) {
         return !!interaction.guild_id && hasIngredientPermission(interaction);
@@ -119,6 +121,46 @@ function buildIngredientContainer(...textDisplayBuilders: TextDisplayBuilder[]):
     };
 }
 
+class AddIngredientModal implements Modal {
+    modalPrefix = 'add_modal';
+    async handle(interaction: APIModalSubmitInteraction, responder: APIResponder, customData?: string): Promise<void> {
+        responder.deferUpdate();
+        console.log('save ingredient submitted', interaction.data.components);
+        const ingredientName = getModalInputValue(interaction.data.components, 'ingredientName');
+        if (!ingredientName) {
+            editResponse(interaction, buildIngredientContainer(new TextDisplayBuilder().setContent("Ingredient name cannot be empty.")));
+            return;
+        }
+        const [existing] = await db
+            .select({ value: count() })
+            .from(ingredients)
+            .where(
+                or(
+                    and(
+                        eq(ingredients.name, ingredientName),
+                        eq(ingredients.guildId, interaction.guild_id!),
+                    ),
+                    and(
+                        eq(ingredients.name, ingredientName),
+                        isNull(ingredients.guildId),
+                        eq(ingredients.isShared, true)
+                    )
+                )
+            );
+        if (existing!.value > 0) {
+            editResponse(interaction, buildIngredientContainer(new TextDisplayBuilder().setContent(`Ingredient ${ingredientName} already exists.`)));
+            return;
+        }
+        await db
+            .insert(ingredients)
+            .values({
+                name: ingredientName,
+                guildId: interaction.guild_id!,
+                isShared: false
+            });
+        editResponse(interaction, buildIngredientContainer(new TextDisplayBuilder().setContent(`Ingredient ${ingredientName} added successfully.`)));
+    }
+}
 
 class AddIngredientButton implements Button {
     buttonPrefix = 'add';
@@ -138,44 +180,6 @@ class AddIngredientButton implements Button {
             );
         const displayedModal = responder.modal(modal.toJSON());
         return;
-        // try {
-        //     const response = await interaction.awaitModalSubmit({ time: 60000, filter: (i) => i.customId === `ingredients:add_modal${interaction.id}` });
-        //     await response.deferUpdate();
-        //     const ingredientName = response.fields.getTextInputValue('ingredientName');
-        //     if (!ingredientName) {
-        //         await interaction.editReply({ content: 'Ingredient name cannot be empty.'});
-        //         return;
-        //     }
-        //     const [existing] = await db
-        //         .select({ value: count() })
-        //         .from(ingredients)
-        //         .where(
-        //             or(
-        //                 and(
-        //                     eq(ingredients.name, ingredientName),
-        //                     eq(ingredients.guildId, interaction.guildId!),
-        //                 ),
-        //                 and(
-        //                     eq(ingredients.name, ingredientName),
-        //                     isNull(ingredients.guildId),
-        //                     eq(ingredients.isShared, true)
-        //                 )
-        //             )
-        //         );
-        //     if (existing?.value ?? 0 > 0) {
-        //         await interaction.editReply({ content: 'This ingredient already exists.', components: []});
-        //         return;
-        //     }
-        //     await db.insert(ingredients).values({
-        //         name: ingredientName,
-        //         guildId: interaction.guildId,
-        //         isShared: false,
-        //         isPendingApproval: false
-        //     });
-        //     await interaction.editReply({ content: `Ingredient ${ingredientName} added successfully.`});
-        // } catch (error) {
-        //     await interaction.editReply({ content: 'An error occurred adding ingredient: Modal Timeout.', components: [] });
-        // }
     }
 }
 
@@ -202,12 +206,5 @@ class ListIngredients implements Button {
         await editResponse(interaction, buildIngredientContainer(new TextDisplayBuilder()
                         .setContent('Here is the list of ingredients:'), new TextDisplayBuilder()
                         .setContent(ingredientNames)));
-    }
-}
-
-class DeleteIngredients implements Button {
-    buttonPrefix = 'delete';
-    async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder): Promise<void> {
-        
     }
 }
