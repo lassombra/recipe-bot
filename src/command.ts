@@ -4,6 +4,7 @@ import type {
     APIChatInputApplicationCommandDMInteraction, 
     APIChatInputApplicationCommandGuildInteraction, 
     APIMessageComponentButtonInteraction, 
+    APIMessageComponentSelectMenuInteraction,
     APIModalSubmitInteraction } from 'discord.js';
 import type { APIResponder } from './server.js';
 
@@ -12,6 +13,7 @@ export abstract class Command {
     buttonPrefix?: string;
     buttons: Map<string, Button> = new Map();
     modals: Map<string, Modal> = new Map();
+    selects: Map<string, Select> = new Map();
 
     async handleButton(interaction: APIMessageComponentButtonInteraction, responder: APIResponder): Promise<void> {
         const buttonId = this.getSubCommandId(interaction);
@@ -36,8 +38,16 @@ export abstract class Command {
         }
         await this.internalHandleModal(interaction, responder);
     }
+    async handleSelect(interaction: APIMessageComponentSelectMenuInteraction, responder: APIResponder): Promise<void> {
+        const selectId = this.getSubCommandId(interaction);
+        if (!(await this.isSelectAllowed(interaction, selectId))) {
+            responder.updateMessage({ content: this.disallowedSelectMessage(interaction), flags: MessageFlags.Ephemeral });
+            return;
+        }
+        await this.internalHandleSelect(interaction, responder);
+    }
 
-    private getSubCommandId(interaction: APIMessageComponentButtonInteraction | APIModalSubmitInteraction): string {
+    private getSubCommandId(interaction: APIMessageComponentButtonInteraction | APIMessageComponentSelectMenuInteraction | APIModalSubmitInteraction): string {
         return interaction.data.custom_id.split(this.buttonPrefix ?? '')[1]?.split(':')[1] ?? '';
     }
 
@@ -48,6 +58,9 @@ export abstract class Command {
         return true;
     }
     protected async isModalAllowed(interaction: APIModalSubmitInteraction, modalId: string): Promise<boolean> {
+        return true;
+    }
+    protected async isSelectAllowed(interaction: APIMessageComponentSelectMenuInteraction, selectId: string): Promise<boolean> {
         return true;
     }
 
@@ -82,6 +95,15 @@ export abstract class Command {
         }
         responder.updateMessageText('This modal has not been implemented yet.');
     }
+    protected async internalHandleSelect(interaction: APIMessageComponentSelectMenuInteraction, responder: APIResponder): Promise<void> {
+        const selectId = this.getSubCommandId(interaction);
+        const select = this.selects.get(selectId);
+        if (select) {
+            const customData = interaction.data.custom_id.split(selectId)[1]?.split(':')[1];
+            return select.handle(interaction, responder, customData);
+        }
+        responder.updateMessageText('This select has not been implemented yet.');
+    }
 
     protected disallowedMessage(interaction: APIChatInputApplicationCommandInteraction) {
         return 'You do not have permission to use this command.';
@@ -92,21 +114,31 @@ export abstract class Command {
     protected disallowedModalMessage(interaction: APIModalSubmitInteraction) {
         return 'You do not have permission to submit this form.';
     }
+    protected disallowedSelectMessage(interaction: APIMessageComponentSelectMenuInteraction) {
+        return 'You do not have permission to use this entry.';
+    }
 
     protected registerButton(button: Button) {
-        this.buttons.set(button.buttonPrefix, button);
+        this.buttons.set(button.prefix, button);
     }
     protected registerModal(modal: Modal) {
-        this.modals.set(modal.modalPrefix, modal);
+        this.modals.set(modal.prefix, modal);
+    }
+    protected registerSelect(select: Select) {
+        this.selects.set(select.prefix, select);
     }
 }
 
-export interface Button {
-    buttonPrefix: string;
-    handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder, customData?: string): Promise<void>;
+export interface SubCommand<T> {
+    prefix: string;
+    handle(interaction: T, responder: APIResponder, customData?: string): Promise<void>;
 }
 
-export interface Modal {
-    modalPrefix: string;
-    handle(interaction: APIModalSubmitInteraction, responder: APIResponder, customData?: string): Promise<void>;
+export interface Button extends SubCommand<APIMessageComponentButtonInteraction> {
+}
+
+export interface Modal extends SubCommand<APIModalSubmitInteraction> {
+}
+
+export interface Select extends SubCommand<APIMessageComponentSelectMenuInteraction> {
 }

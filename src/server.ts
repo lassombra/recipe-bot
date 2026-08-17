@@ -5,6 +5,7 @@ import type {
     APIInteractionResponseCallbackData, 
     APIModalInteractionResponseCallbackData,
     APIMessageComponentButtonInteraction, 
+    APIMessageComponentSelectMenuInteraction,
     APIModalSubmitInteraction } from 'discord.js';
 import {
     InteractionType,
@@ -16,7 +17,7 @@ import {
 import Fastify, { type FastifyReply } from 'fastify';
 // import initializeCommands from './commandHandler.js';
 import { verifyKey } from 'discord-interactions';
-import { handleButtonInteraction, handleModalInteraction, handleSlashCommand } from './commandHandler.js';
+import { handleButtonInteraction, handleModalInteraction, handleSelectInteraction, handleSlashCommand } from './commandHandler.js';
 
 const fastify = Fastify({logger: true});
 fastify.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
@@ -62,6 +63,12 @@ fastify.post('/interactions', async (request, reply) => {
     if (interaction.type === InteractionType.MessageComponent && interaction.data.component_type === ComponentType.Button) {
         const buttonInteraction = interaction as APIMessageComponentButtonInteraction;
         await handleButtonInteraction(buttonInteraction, new APIResponder(reply));
+        return;
+    }
+
+    if (interaction.type === InteractionType.MessageComponent && interaction.data.component_type === ComponentType.StringSelect) {
+        const selectInteraction = interaction as APIMessageComponentSelectMenuInteraction;
+        await handleSelectInteraction(selectInteraction, new APIResponder(reply));
         return;
     }
 

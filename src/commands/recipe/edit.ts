@@ -14,6 +14,7 @@ import {
     TextInputStyle,
     StringSelectMenuBuilder,
     type APIMessageComponentButtonInteraction,
+    type APIMessageComponentSelectMenuInteraction,
     type APIModalSubmitInteraction,
     SeparatorBuilder,
 } from 'discord.js';
@@ -23,7 +24,7 @@ import { db } from '../../db/index.js';
 import { recipes } from '../../db/schema.js';
 import { getModalInputValue } from '../../client.js';
 import { Command } from '../../command.js';
-import type { Button, Modal } from '../../command.js';
+import type { Button, Modal, Select } from '../../command.js';
 import type { APIResponder } from '../../server.js';
 
 type ContainerMessageBuilder = (container: ContainerBuilder) => void;
@@ -108,6 +109,7 @@ export class EditRecipe extends Command {
         this.registerButton(new FinishRecipeButton());
         this.registerModal(new EditRecipeModal());
         this.registerModal(new NewRecipeModal());
+        this.registerSelect(new EditRecipeSelect());
     }
 
     protected async internalHandleCommand(interaction: APIChatInputApplicationCommandInteraction, responder: APIResponder): Promise<void> {
@@ -130,7 +132,7 @@ export class EditRecipe extends Command {
 }
 
 class NewRecipeButton implements Button {
-    buttonPrefix = 'new';
+    prefix = 'new';
 
     async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder): Promise<void> {
         const modal = new ModalBuilder()
@@ -160,7 +162,7 @@ class NewRecipeButton implements Button {
 }
 
 class AddStepRecipeButton implements Button {
-    buttonPrefix = 'add_step';
+    prefix = 'add_step';
 
     async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder, customData?: string): Promise<void> {
         const guildId = interaction.guild_id;
@@ -182,7 +184,7 @@ class AddStepRecipeButton implements Button {
 }
 
 class FinishRecipeButton implements Button {
-    buttonPrefix = 'finish';
+    prefix = 'finish';
 
     async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder, customData?: string): Promise<void> {
         const guildId = interaction.guild_id;
@@ -204,7 +206,7 @@ class FinishRecipeButton implements Button {
 }
 
 class OpenEditRecipeModalButton implements Button {
-    buttonPrefix = 'edit';
+    prefix = 'edit';
 
     async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder): Promise<void> {
         const modal = new ModalBuilder()
@@ -226,7 +228,7 @@ class OpenEditRecipeModalButton implements Button {
 }
 
 class EditRecipeModal implements Modal {
-    modalPrefix = 'edit_modal';
+    prefix = 'edit_modal';
 
     async handle(interaction: APIModalSubmitInteraction, responder: APIResponder): Promise<void> {
         const recipePrefix = (getModalInputValue(interaction.data.components, 'recipeName') ?? '').trim().toLowerCase();
@@ -269,7 +271,7 @@ class EditRecipeModal implements Modal {
 }
 
 class NewRecipeModal implements Modal {
-    modalPrefix = 'new_modal';
+    prefix = 'new_modal';
 
     async handle(interaction: APIModalSubmitInteraction, responder: APIResponder): Promise<void> {
         const guildId = interaction.guild_id;
@@ -298,5 +300,33 @@ class NewRecipeModal implements Modal {
         }
 
         responder.updateMessage(buildRecipeCard(createdRecipe));
+    }
+}
+
+class EditRecipeSelect implements Select {
+    prefix = 'recipe_select';
+
+    async handle(interaction: APIMessageComponentSelectMenuInteraction, responder: APIResponder): Promise<void> {
+        const guildId = interaction.guild_id;
+        const selectedValue = interaction.data.values[0];
+
+        if (!guildId || !selectedValue) {
+            responder.updateMessage(buildContainerMessage({ text: 'Recipe not found.' }));
+            return;
+        }
+
+        const recipeId = Number(selectedValue);
+        if (!Number.isInteger(recipeId) || recipeId <= 0) {
+            responder.updateMessage(buildContainerMessage({ text: 'Recipe not found.' }));
+            return;
+        }
+
+        const recipe = await getRecipeForGuild(guildId, recipeId);
+        if (!recipe) {
+            responder.updateMessage(buildContainerMessage({ text: 'Recipe not found.' }));
+            return;
+        }
+
+        responder.updateMessage(buildRecipeCard(recipe));
     }
 }

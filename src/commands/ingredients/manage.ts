@@ -122,7 +122,7 @@ function buildIngredientContainer(...textDisplayBuilders: TextDisplayBuilder[]):
 }
 
 class AddIngredientModal implements Modal {
-    modalPrefix = 'add_modal';
+    prefix = 'add_modal';
     async handle(interaction: APIModalSubmitInteraction, responder: APIResponder, customData?: string): Promise<void> {
         responder.deferUpdate();
         console.log('save ingredient submitted', interaction.data.components);
@@ -163,7 +163,7 @@ class AddIngredientModal implements Modal {
 }
 
 class AddIngredientButton implements Button {
-    buttonPrefix = 'add';
+    prefix = 'add';
     async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder): Promise<void> {
         const modal = new ModalBuilder()
             .setCustomId(`ingredients:add_modal:${interaction.id}`)
@@ -184,7 +184,7 @@ class AddIngredientButton implements Button {
 }
 
 class ListIngredients implements Button {
-    buttonPrefix = 'list';
+    prefix = 'list';
     async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder): Promise<void> {
         responder.deferUpdate();
 
