@@ -130,3 +130,22 @@ export async function createRecipeForGuild(
 
     return createdRecipe;
 }
+
+export async function updateRecipeForGuild(
+    guildId: string,
+    recipeId: number,
+    title: string,
+    description: string | null,
+): Promise<RecipeCardData | undefined> {
+    const [updatedRecipe] = await db
+        .update(recipes)
+        .set({
+            title,
+            description,
+            updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(and(eq(recipes.id, recipeId), eq(recipes.guildId, guildId)))
+        .returning({ id: recipes.id, title: recipes.title, description: recipes.description });
+
+    return updatedRecipe;
+}

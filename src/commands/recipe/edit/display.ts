@@ -70,8 +70,41 @@ export function buildRecipeSelectRow(options: RecipeSelectOption[]) {
     return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
 }
 
+export function buildMoreResultsRow(customData: string) {
+    return new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`${EditRecipeCustomId.MoreButtonPrefix}:${customData}`)
+            .setLabel('More')
+            .setStyle(ButtonStyle.Secondary),
+    );
+}
+
+export function buildRecipeSearchResultsMessage(
+    options: RecipeSelectOption[],
+    hasMore: boolean,
+    moreCustomData?: string,
+) {
+    const selectRow = buildRecipeSelectRow(options);
+
+    return buildContainerMessage({
+        build: (container) => {
+            container
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent('Select a recipe:'))
+                .addActionRowComponents(selectRow);
+
+            if (hasMore && moreCustomData) {
+                container.addActionRowComponents(buildMoreResultsRow(moreCustomData));
+            }
+        },
+    });
+}
+
 export function buildRecipeCard(recipe: RecipeCardData) {
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`${EditRecipeCustomId.EditDetailsButtonPrefix}:${recipe.id}`)
+            .setLabel('Edit Details')
+            .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
             .setCustomId(`${EditRecipeCustomId.AddStepButtonPrefix}:${recipe.id}`)
             .setLabel('Add Step')
