@@ -119,13 +119,27 @@ export abstract class Command {
         return 'You do not have permission to use this entry.';
     }
 
+    protected registerButtons(buttons: Button[]) {
+        for (const button of buttons) {
+            this.registerButton(button);
+        }
+    }
     protected registerButton(button: Button) {
         this.buttons.set(button.prefix, button);
+    }
+    protected registerModals(modals: Modal[]) {
+        for (const modal of modals) {
+            this.registerModal(modal);
+        }
     }
     protected registerModal(modal: Modal) {
         this.modals.set(modal.prefix, modal);
     }
-    protected registerSelect(select: Select) {
+    protected registerSelects(selects: Select[]) {
+        for (const select of selects) {
+            this.registerSelect(select);
+        }
+    }    protected registerSelect(select: Select) {
         this.selects.set(select.prefix, select);
     }
 }

@@ -3,26 +3,20 @@ import {
     MessageFlags,
     InteractionContextType,
     ApplicationIntegrationType,
-    ModalBuilder,
-    LabelBuilder,
-    TextInputBuilder,
-    TextInputStyle,
-    type APIMessageComponentButtonInteraction,
     type APIMessageComponentSelectMenuInteraction,
-    type APIModalSubmitInteraction,
 } from 'discord.js';
 import type { APIChatInputApplicationCommandInteraction } from 'discord.js';
-import { editResponse, getModalInputValue } from '../../client.js';
 import { Command } from '../../command.js';
-import type { Button, Modal, Select } from '../../command.js';
+import type { Select } from '../../command.js';
 import type { APIResponder } from '../../server.js';
-import { EditRecipeCustomId } from './edit/ids.js';
 import { buildContainerMessage, buildRecipeCard, buildRecipeSearchResultsMessage, buildStartRow } from './edit/display.js';
-import { addStepToRecipe, createRecipeForGuild, findRecipesForGuildPrefix, getRecipeForGuild, updateRecipeForGuild } from './edit/data.js';
+import { findRecipesForGuildPrefix, getRecipeForGuild } from './edit/data.js';
+import { EditRecipeModal, NewRecipeModal, StepModal } from './edit/modalHandlers.js';
+import { AddStepRecipeButton, EditRecipeDetailsButton, FinishRecipeButton, MoreRecipeResultsButton, NewRecipeButton, OpenEditRecipeModalButton } from './edit/buttonHandlers.js';
 
 const RECIPE_SEARCH_PAGE_SIZE = 25;
 
-function buildRecipeNotFoundWithStartActions() {
+export function buildRecipeNotFoundWithStartActions() {
     return buildContainerMessage({ text: 'Recipe not found', row: buildStartRow() });
 }
 
@@ -30,7 +24,7 @@ function makeMoreCustomData(recipePrefix: string, nextPage: number): string {
     return `${encodeURIComponent(recipePrefix)}~${nextPage}`;
 }
 
-function parseMoreCustomData(customData?: string): { recipePrefix: string; page: number } | null {
+export function parseMoreCustomData(customData?: string): { recipePrefix: string; page: number } | null {
     if (!customData) return null;
     const separatorIndex = customData.lastIndexOf('~');
     if (separatorIndex <= 0) return null;
@@ -50,7 +44,7 @@ function parseMoreCustomData(customData?: string): { recipePrefix: string; page:
     }
 }
 
-async function updateRecipeSearchResults(responder: APIResponder, guildId: string, recipePrefix: string, page: number): Promise<void> {
+export async function updateRecipeSearchResults(responder: APIResponder, guildId: string, recipePrefix: string, page: number): Promise<void> {
     const { results, totalCount } = await findRecipesForGuildPrefix(guildId, recipePrefix, page, RECIPE_SEARCH_PAGE_SIZE);
     if (results.length === 0) {
         responder.updateMessage(buildContainerMessage({ text: 'no recipe found' }));
@@ -72,16 +66,22 @@ export class EditRecipe extends Command {
 
     constructor() {
         super();
-        this.registerButton(new NewRecipeButton());
-        this.registerButton(new OpenEditRecipeModalButton());
-        this.registerButton(new EditRecipeDetailsButton());
-        this.registerButton(new AddStepRecipeButton());
-        this.registerButton(new MoreRecipeResultsButton());
-        this.registerButton(new FinishRecipeButton());
-        this.registerModal(new EditRecipeModal());
-        this.registerModal(new NewRecipeModal());
-        this.registerModal(new StepModal());
-        this.registerSelect(new EditRecipeSelect());
+        this.registerButtons([
+            new NewRecipeButton(),
+            new OpenEditRecipeModalButton(),
+            new EditRecipeDetailsButton(),
+            new AddStepRecipeButton(),
+            new MoreRecipeResultsButton(),
+            new FinishRecipeButton(),
+        ]);
+        this.registerModals([
+            new EditRecipeModal(),
+            new NewRecipeModal(),
+            new StepModal(),
+        ]);
+        this.registerSelects([
+            new EditRecipeSelect(),
+        ]);
     }
 
     protected async internalHandleCommand(interaction: APIChatInputApplicationCommandInteraction, responder: APIResponder): Promise<void> {
@@ -90,239 +90,6 @@ export class EditRecipe extends Command {
             ...buildContainerMessage({ text: 'What would you like to do?', row }),
             flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
         });
-    }
-}
-
-class NewRecipeButton implements Button {
-    prefix = 'new';
-
-    async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder): Promise<void> {
-        const modal = new ModalBuilder()
-            .setCustomId(EditRecipeCustomId.NewModal)
-            .setTitle('Create New Recipe')
-            .addLabelComponents(
-                new LabelBuilder()
-                    .setLabel('Recipe Title')
-                    .setTextInputComponent(
-                        new TextInputBuilder()
-                            .setCustomId('recipeTitle')
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true),
-                    ),
-                new LabelBuilder()
-                    .setLabel('Description')
-                    .setTextInputComponent(
-                        new TextInputBuilder()
-                            .setCustomId('recipeDescription')
-                            .setStyle(TextInputStyle.Paragraph)
-                            .setRequired(false),
-                    ),
-            );
-
-        responder.modal(modal.toJSON());
-    }
-}
-
-class OpenEditRecipeModalButton implements Button {
-    prefix = 'edit';
-
-    async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder): Promise<void> {
-        const modal = new ModalBuilder()
-            .setCustomId(EditRecipeCustomId.EditModal)
-            .setTitle('Find Recipe To Edit')
-            .addLabelComponents(
-                new LabelBuilder()
-                    .setLabel('Recipe Name')
-                    .setTextInputComponent(
-                        new TextInputBuilder()
-                            .setCustomId('recipeName')
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true),
-                    ),
-            );
-
-        responder.modal(modal.toJSON());
-    }
-}
-
-class EditRecipeDetailsButton implements Button {
-    prefix = 'edit_details';
-
-    async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder, customData?: string): Promise<void> {
-        const guildId = interaction.guild_id;
-        const recipeId = Number(customData);
-
-        if (!guildId || !Number.isInteger(recipeId) || recipeId <= 0) {
-            responder.updateMessage(buildRecipeNotFoundWithStartActions());
-            return;
-        }
-
-        const recipe = await getRecipeForGuild(guildId, recipeId);
-        if (!recipe) {
-            responder.updateMessage(buildRecipeNotFoundWithStartActions());
-            return;
-        }
-
-        const modal = new ModalBuilder()
-            .setCustomId(`${EditRecipeCustomId.NewModal}:${recipe.id}`)
-            .setTitle('Edit Recipe Details')
-            .addLabelComponents(
-                new LabelBuilder()
-                    .setLabel('Recipe Title')
-                    .setTextInputComponent(
-                        new TextInputBuilder()
-                            .setCustomId('recipeTitle')
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true)
-                            .setValue(recipe.title),
-                    ),
-                new LabelBuilder()
-                    .setLabel('Description')
-                    .setTextInputComponent(
-                        new TextInputBuilder()
-                            .setCustomId('recipeDescription')
-                            .setStyle(TextInputStyle.Paragraph)
-                            .setRequired(false)
-                            .setValue(recipe.description ?? ''),
-                    ),
-            );
-
-        responder.modal(modal.toJSON());
-    }
-}
-
-class AddStepRecipeButton implements Button {
-    prefix = 'add_step';
-
-    async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder, customData?: string): Promise<void> {
-        const guildId = interaction.guild_id;
-        const recipeId = Number(customData);
-
-        if (!guildId || !Number.isInteger(recipeId) || recipeId <= 0) {
-            responder.updateMessage(buildContainerMessage({ text: 'Recipe not found.' }));
-            return;
-        }
-
-        const recipe = await getRecipeForGuild(guildId, recipeId);
-        if (!recipe) {
-            responder.updateMessage(buildContainerMessage({ text: 'Recipe not found.' }));
-            return;
-        }
-        const modal = new ModalBuilder()
-            .setCustomId(`${EditRecipeCustomId.StepModal}:${recipe.id}`)
-            .setTitle('Add Recipe Step')
-            .addLabelComponents(
-                new LabelBuilder()
-                    .setLabel('Step Instruction')
-                    .setTextInputComponent(
-                        new TextInputBuilder()
-                            .setCustomId('stepInstruction')
-                            .setStyle(TextInputStyle.Paragraph)
-                            .setRequired(true)
-                    )
-            )
-        responder.modal(modal.toJSON());
-    }
-}
-
-class MoreRecipeResultsButton implements Button {
-    prefix = 'more';
-
-    async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder, customData?: string): Promise<void> {
-        const guildId = interaction.guild_id;
-        const parsed = parseMoreCustomData(customData);
-
-        if (!guildId || !parsed) {
-            responder.updateMessage(buildContainerMessage({ text: 'no recipe found' }));
-            return;
-        }
-
-        await updateRecipeSearchResults(responder, guildId, parsed.recipePrefix, parsed.page);
-    }
-}
-
-class FinishRecipeButton implements Button {
-    prefix = 'finish';
-
-    async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder, customData?: string): Promise<void> {
-        const guildId = interaction.guild_id;
-        const recipeId = Number(customData);
-
-        if (!guildId || !Number.isInteger(recipeId) || recipeId <= 0) {
-            responder.updateMessage(buildContainerMessage({ text: 'Recipe not found.' }));
-            return;
-        }
-
-        const recipe = await getRecipeForGuild(guildId, recipeId);
-        if (!recipe) {
-            responder.updateMessage(buildContainerMessage({ text: 'Recipe not found.' }));
-            return;
-        }
-
-        responder.updateMessage(buildRecipeCard(recipe));
-    }
-}
-
-class EditRecipeModal implements Modal {
-    prefix = 'edit_modal';
-
-    async handle(interaction: APIModalSubmitInteraction, responder: APIResponder): Promise<void> {
-        const recipePrefix = (getModalInputValue(interaction.data.components, 'recipeName') ?? '').trim().toLowerCase();
-        const guildId = interaction.guild_id;
-
-        if (!guildId) {
-            responder.updateMessage(buildContainerMessage({ text: 'no recipe found' }));
-            return;
-        }
-
-        await updateRecipeSearchResults(responder, guildId, recipePrefix, 1);
-    }
-}
-
-class NewRecipeModal implements Modal {
-    prefix = 'new_modal';
-
-    async handle(interaction: APIModalSubmitInteraction, responder: APIResponder, customData?: string): Promise<void> {
-        const guildId = interaction.guild_id;
-        const title = (getModalInputValue(interaction.data.components, 'recipeTitle') ?? '').trim();
-        const description = (getModalInputValue(interaction.data.components, 'recipeDescription') ?? '').trim();
-        const descriptionOrNull = description.length > 0 ? description : null;
-
-        if (!guildId || !title) {
-            responder.updateMessage(buildContainerMessage({ text: 'Could not create recipe.' }));
-            return;
-        }
-
-        if (customData !== undefined) {
-            const recipeId = Number(customData);
-            if (!Number.isInteger(recipeId) || recipeId <= 0) {
-                responder.updateMessage(buildRecipeNotFoundWithStartActions());
-                return;
-            }
-
-            const updatedRecipe = await updateRecipeForGuild(guildId, recipeId, title, descriptionOrNull);
-            if (!updatedRecipe) {
-                responder.updateMessage(buildRecipeNotFoundWithStartActions());
-                return;
-            }
-
-            responder.updateMessage(buildRecipeCard(updatedRecipe));
-            return;
-        }
-
-        const createdByUserId = interaction.member?.user.id;
-        if (!createdByUserId) {
-            responder.updateMessage(buildContainerMessage({ text: 'Could not create recipe.' }));
-            return;
-        }
-
-        const createdRecipe = await createRecipeForGuild(guildId, createdByUserId, title, descriptionOrNull);
-        if (!createdRecipe) {
-            responder.updateMessage(buildContainerMessage({ text: 'Could not create recipe.' }));
-            return;
-        }
-
-        responder.updateMessage(buildRecipeCard(createdRecipe));
     }
 }
 
@@ -351,44 +118,5 @@ class EditRecipeSelect implements Select {
         }
 
         responder.updateMessage(buildRecipeCard(recipe));
-    }
-}
-
-class StepModal implements Modal {
-    prefix = 'step_modal';
-
-    async handle(interaction: APIModalSubmitInteraction, responder: APIResponder, customData?: string): Promise<void> {
-        const guildId = interaction.guild_id;
-        if (!guildId || !customData) {
-            responder.updateMessage(buildContainerMessage({ text: 'Could not add step.' }));
-            return;
-        }
-
-        const recipeId = Number(customData.split('~')[0]);
-        if (!Number.isInteger(recipeId) || recipeId <= 0) {
-            responder.updateMessage(buildContainerMessage({ text: 'Could not add step.' }));
-            return;
-        }
-
-        const stepInstruction = getModalInputValue(interaction.data.components, 'stepInstruction');
-        if (!stepInstruction) {
-            responder.updateMessage(buildContainerMessage({ text: 'Step instruction is required.' }));
-            return;
-        }
-
-        responder.deferUpdate();
-        const createdStep = await addStepToRecipe(recipeId, stepInstruction);
-        if (!createdStep) {
-            editResponse(interaction, buildContainerMessage({ text: 'Could not add step.' }));
-            return;
-        }
-
-        const updatedRecipe = await getRecipeForGuild(guildId, recipeId);
-        if (!updatedRecipe) {
-            editResponse(interaction, buildContainerMessage({ text: 'Recipe not found.' }));
-            return;
-        }
-
-        editResponse(interaction, buildRecipeCard(updatedRecipe));
     }
 }
