@@ -103,7 +103,7 @@ export function buildRecipeSearchResultsMessage(
 export function buildRecipeCard(recipe: RecipeCardData) {
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-            .setCustomId(`${EditRecipeCustomId.EditDetailsButtonPrefix}:${recipe.id}`)
+            .setCustomId(`${EditRecipeCustomId.NewButton}:${recipe.id}`)
             .setLabel('Edit Details')
             .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()

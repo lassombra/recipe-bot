@@ -9,10 +9,14 @@ import { buildContainerMessage, buildRecipeCard } from "./display.js";
 export class NewRecipeButton implements Button {
     prefix = 'new';
 
-    async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder): Promise<void> {
+    async handle(_interaction: APIMessageComponentButtonInteraction, responder: APIResponder, customData?: string): Promise<void> {
+        const isNew = !customData;
+        const title = isNew ? 'Create New Recipe' : 'Edit Recipe'; 
+        const id = isNew ? '' : customData;
+        const recipe = isNew ? null : await getRecipeForGuild(_interaction.guild_id!, Number(customData), true);
         const modal = new ModalBuilder()
-            .setCustomId(EditRecipeCustomId.RecipeHeaderModal)
-            .setTitle('Create New Recipe')
+            .setCustomId(`${EditRecipeCustomId.RecipeHeaderModal}${isNew ? '' : `:${id}`}`) //postpends id if provided
+            .setTitle(title)
             .addLabelComponents(
                 new LabelBuilder()
                     .setLabel('Recipe Title')
@@ -20,7 +24,8 @@ export class NewRecipeButton implements Button {
                         new TextInputBuilder()
                             .setCustomId('recipeTitle')
                             .setStyle(TextInputStyle.Short)
-                            .setRequired(true),
+                            .setRequired(true)
+                            .setValue(recipe?.title ?? ''),
                     ),
                 new LabelBuilder()
                     .setLabel('Description')
@@ -28,10 +33,10 @@ export class NewRecipeButton implements Button {
                         new TextInputBuilder()
                             .setCustomId('recipeDescription')
                             .setStyle(TextInputStyle.Paragraph)
-                            .setRequired(false),
+                            .setRequired(false)
+                            .setValue(recipe?.description ?? ''),
                     ),
             );
-
         responder.modal(modal.toJSON());
     }
 }
@@ -39,7 +44,7 @@ export class NewRecipeButton implements Button {
 export class OpenEditRecipeModalButton implements Button {
     prefix = 'edit';
 
-    async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder): Promise<void> {
+    async handle(_interaction: APIMessageComponentButtonInteraction, responder: APIResponder): Promise<void> {
         const modal = new ModalBuilder()
             .setCustomId(EditRecipeCustomId.RecipeSearchModal)
             .setTitle('Find Recipe To Edit')

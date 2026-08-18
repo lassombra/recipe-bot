@@ -35,13 +35,13 @@ export interface RecipeSearchPage {
     totalCount: number;
 }
 
-export async function getRecipeForGuild(guildId: string, recipeId: number): Promise<RecipeCardData | undefined> {
+export async function getRecipeForGuild(guildId: string, recipeId: number, summary: boolean = false): Promise<RecipeCardData | undefined> {
     const [recipe] = await db
         .select({ id: recipes.id, title: recipes.title, description: recipes.description })
         .from(recipes)
         .where(and(eq(recipes.id, recipeId), eq(recipes.guildId, guildId)))
         .limit(1);
-    const steps = await db
+    const steps = summary ? [] : await db
         .select({ id: recipeInstructions.id, recipeId: recipeInstructions.recipeId, instruction: recipeInstructions.instruction })
         .from(recipeInstructions)
         .where(eq(recipeInstructions.recipeId, recipeId))
