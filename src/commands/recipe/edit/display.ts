@@ -111,7 +111,7 @@ export function buildRecipeCard(recipe: RecipeCardData) {
             .setLabel('Add Step')
             .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
-            .setCustomId(`${EditRecipeCustomId.FinishButtonPrefix}:${recipe.id}`)
+            .setCustomId(`${EditRecipeCustomId.FinishButtonPrefix}`)
             .setLabel('Finish')
             .setStyle(ButtonStyle.Secondary),
     );
@@ -122,7 +122,7 @@ export function buildRecipeCard(recipe: RecipeCardData) {
             new TextDisplayBuilder().setContent(`Step ${index + 1}: ${step.instruction}`)
         ).setButtonAccessory(
             new ButtonBuilder()
-                .setCustomId('not-implemented')
+                .setCustomId(`${EditRecipeCustomId.EditStepButton}:${recipe.id}~${step.id}`)
                 .setStyle(ButtonStyle.Secondary)
                 .setLabel('Edit')
         )
@@ -155,7 +155,7 @@ export function buildStepCard(step: RecipeStepData) {
             container.addActionRowComponents(
                 new ActionRowBuilder<ButtonBuilder>().addComponents(
                     new ButtonBuilder()
-                        .setCustomId(`${EditRecipeCustomId.EditButton}:${step.id}`)
+                        .setCustomId(`${EditRecipeCustomId.EditButton}:${step.recipeId}`)
                         .setLabel('Back To Recipe')
                         .setStyle(ButtonStyle.Secondary),
                     new ButtonBuilder()

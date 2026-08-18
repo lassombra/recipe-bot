@@ -81,7 +81,7 @@ export abstract class Command {
         const buttonId = this.getSubCommandId(interaction);
         const button = this.buttons.get(buttonId);
         if (button) {
-            const customData = interaction.data.custom_id.split(buttonId)[1]?.split(':')[1];
+            const customData = interaction.data.custom_id.split(`${this.buttonPrefix}:${buttonId}:`)[1];
             return button.handle(interaction, responder, customData);
         }
         responder.updateMessageText('This button has not been implemented yet.');
@@ -139,7 +139,8 @@ export abstract class Command {
         for (const select of selects) {
             this.registerSelect(select);
         }
-    }    protected registerSelect(select: Select) {
+    }
+    protected registerSelect(select: Select) {
         this.selects.set(select.prefix, select);
     }
 }

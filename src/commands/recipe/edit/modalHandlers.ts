@@ -3,7 +3,7 @@ import { getModalInputValue, editResponse } from "../../../client.js";
 import type { Modal } from "../../../command.js";
 import type { APIResponder } from "../../../server.js";
 import { addStepToRecipe, createRecipeForGuild, getRecipeForGuild, updateRecipeForGuild } from "./data.js";
-import { buildContainerMessage, buildRecipeCard } from "./display.js";
+import { buildContainerMessage, buildRecipeCard, buildStepCard } from "./display.js";
 import { buildRecipeNotFoundWithStartActions, updateRecipeSearchResults } from "../edit.js";
 
 
@@ -35,14 +35,8 @@ export class StepModal implements Modal {
             editResponse(interaction, buildContainerMessage({ text: 'Could not add step.' }));
             return;
         }
-
-        const updatedRecipe = await getRecipeForGuild(guildId, recipeId);
-        if (!updatedRecipe) {
-            editResponse(interaction, buildContainerMessage({ text: 'Recipe not found.' }));
-            return;
-        }
-
-        editResponse(interaction, buildRecipeCard(updatedRecipe));
+        
+        editResponse(interaction, buildStepCard(createdStep));
     }
 }
 export class NewRecipeModal implements Modal {
