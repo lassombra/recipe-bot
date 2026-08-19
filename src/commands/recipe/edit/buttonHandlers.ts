@@ -3,7 +3,7 @@ import type { APIResponder } from "../../../server.js";
 import type { Button } from "../../../command.js";
 import { EditRecipeCustomId } from "./ids.js";
 import { buildRecipeNotFoundWithStartActions, parseMoreCustomData, updateRecipeSearchResults } from "../edit.js";
-import { getRecipeForGuild } from "./data.js";
+import { deleteRecipeStep, getRecipeForGuild } from "./data.js";
 import { buildContainerMessage, buildRecipeCard, buildStartRow, buildStepCard } from "./display.js";
 import { editResponse } from "../../../client.js";
 
@@ -214,3 +214,33 @@ export class FinishRecipeButton implements Button {
     }
 }
 
+export class DeleteStepButton implements Button {
+    prefix = 'delete_step';
+    async handle(interaction: APIMessageComponentButtonInteraction, responder: APIResponder, customData?: string): Promise<void> {
+        const guildId = interaction.guild_id;
+        const [recipeIdStr, stepIdStr] = (customData ?? '').split('~');
+        const recipeId = Number(recipeIdStr);
+        const stepId = Number(stepIdStr);
+
+        if (!guildId || !Number.isInteger(recipeId) || recipeId <= 0 || !Number.isInteger(stepId) || stepId <= 0) {
+            responder.updateMessage(buildContainerMessage({ text: 'Recipe or step not found.' }));
+            return;
+        }
+
+        const recipe = await getRecipeForGuild(guildId, recipeId, true);
+        if (!recipe) {
+            responder.updateMessage(buildContainerMessage({ text: 'Recipe not found.' }));
+            return;
+        }
+        responder.deferUpdate();
+        
+        const deletedStepNumber = await deleteRecipeStep(guildId, recipeId, stepId);
+        const updatedRecipe = (await getRecipeForGuild(guildId, recipeId))!;
+
+        if (updatedRecipe.steps.find(step => step.stepNumber === deletedStepNumber)) {
+            editResponse(interaction, buildStepCard(updatedRecipe.steps.find(step => step.stepNumber === deletedStepNumber)!));
+        } else {
+            editResponse(interaction, buildRecipeCard(updatedRecipe));
+        }
+    }
+}

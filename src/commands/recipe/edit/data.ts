@@ -22,7 +22,9 @@ export interface RecipeStepData {
     id: number;
     recipeId: number;
     instruction: string;
+    stepNumber: number;
     ingredients: IngredientData[];
+    nextStepId: number | null;
 }
 
 export interface RecipeSelectOption {
@@ -35,6 +37,13 @@ export interface RecipeSearchPage {
     totalCount: number;
 }
 
+/**
+ * Finds a recipe for the given guild and recipe ID, and returns it in a format ready for display or further processing.
+ * @param guildId the guildId the recipe is associated with, loading a recipe with the wrong guild id will return undefined
+ * @param recipeId the recipe id to load
+ * @param summary if true, will only load the top level recipe information - used to quickly verify the existence of a recipe or for limited display not needing the full info
+ * @returns the recipe with instructions, or undefined if not found or guildId and recipeId don't correspond.
+ */
 export async function getRecipeForGuild(guildId: string, recipeId: number, summary: boolean = false): Promise<RecipeCardData | undefined> {
     const [recipe] = await db
         .select({ id: recipes.id, title: recipes.title, description: recipes.description })
@@ -42,18 +51,18 @@ export async function getRecipeForGuild(guildId: string, recipeId: number, summa
         .where(and(eq(recipes.id, recipeId), eq(recipes.guildId, guildId)))
         .limit(1);
     const steps = summary ? [] : await db
-        .select({ id: recipeInstructions.id, recipeId: recipeInstructions.recipeId, instruction: recipeInstructions.instruction })
+        .select({ id: recipeInstructions.id, recipeId: recipeInstructions.recipeId, instruction: recipeInstructions.instruction, stepNumber: recipeInstructions.stepNumber })
         .from(recipeInstructions)
         .where(eq(recipeInstructions.recipeId, recipeId))
         .orderBy(asc(recipeInstructions.id));
-    const stepsWithIngredients = await Promise.all(
+    const stepsWithIngredients: RecipeStepData[] = await Promise.all(
         steps.map(async (step) => {
             const ingredientsForStep = await db
                 .select({ id: ingredients.id, name: ingredients.name, quantityNumerator: recipeIngredients.quantityNumerator, quantityDenominator: recipeIngredients.quantityDenominator, unit: recipeIngredients.unit, preparation: recipeIngredients.preparationNote })
                 .from(recipeIngredients)
                 .innerJoin(ingredients, eq(ingredients.id, recipeIngredients.ingredientId))
                 .where(eq(recipeIngredients.recipeInstructionId, step.id));
-            return { ...step, ingredients: ingredientsForStep.map(ingredient => ({
+            return { ...step, nextStepId: null, ingredients: ingredientsForStep.map(ingredient => ({
                 id: ingredient.id,
                 name: ingredient.name,
                 quantity: formatQuantity(fromDbQuantity(ingredient.quantityNumerator, ingredient.quantityDenominator)),
@@ -62,6 +71,9 @@ export async function getRecipeForGuild(guildId: string, recipeId: number, summa
             })) };
         })
     );
+    for (const [index, step] of stepsWithIngredients.entries()) {
+        step.nextStepId = stepsWithIngredients[index + 1]?.id ?? null;
+    }
     if (!recipe) {
         return undefined;
     }
@@ -214,7 +226,9 @@ export async function addStepToRecipe(
         id: createdStep.id,
         instruction: createdStep.instruction,
         recipeId: recipeId,
+        stepNumber: stepNumber,
         ingredients: [], // Initialize with an empty array or fetch existing ingredients if needed
+        nextStepId: null,
     };
 }
 
@@ -228,7 +242,7 @@ export async function updateStep(
             instruction,
         })
         .where(eq(recipeInstructions.id, id))
-        .returning({ id: recipeInstructions.id, instruction: recipeInstructions.instruction, recipeId: recipeInstructions.recipeId });
+        .returning({ id: recipeInstructions.id, instruction: recipeInstructions.instruction, recipeId: recipeInstructions.recipeId, stepNumber: recipeInstructions.stepNumber });
 
     if (!updatedStep) {
         return undefined;
@@ -251,10 +265,59 @@ export async function updateStep(
         quantity: formatQuantity(fromDbQuantity(entry.quantityNumerator, entry.quantityDenominator)),
     }));
 
+    const nextStep = await db
+        .select({ id: recipeInstructions.id })
+        .from(recipeInstructions)
+        .where(and(
+            eq(recipeInstructions.stepNumber, updatedStep.stepNumber + 1),
+            eq(recipeInstructions.recipeId, updatedStep.recipeId)
+        ))
+        .limit(1)
+        .then(rows => rows[0] ?? null);
+
     return {
         id: updatedStep.id,
         instruction: updatedStep.instruction,
         recipeId: updatedStep.recipeId,
+        stepNumber: updatedStep.stepNumber,
         ingredients: mappedIngredients, // Initialize with an empty array or fetch existing ingredients if needed
+        nextStepId: nextStep?.id ?? null,
     };
+}
+
+export async function deleteRecipeStep(
+    guildId: string,
+    recipeId: number,
+    stepId: number,
+): Promise<number | null> {
+    const deletedStepNumber = await db
+        .select({ stepNumber: recipeInstructions.stepNumber })
+        .from(recipeInstructions)
+        .where(eq(recipeInstructions.id, stepId))
+        .then(rows => rows[0]?.stepNumber ?? null);
+    await db
+        .delete(recipeInstructions)
+        .where(
+            and(
+                eq(recipeInstructions.id, stepId),
+                eq(recipeInstructions.recipeId, recipeId)
+            )
+        );
+    // reorder remaining steps
+    const remainingSteps = await db
+        .select({ id: recipeInstructions.id, stepNumber: recipeInstructions.stepNumber })
+        .from(recipeInstructions)
+        .where(eq(recipeInstructions.recipeId, recipeId))
+        .orderBy(recipeInstructions.stepNumber);
+
+    for (let i = 0; i < remainingSteps.length; i++) {
+        const step = remainingSteps[i]!;
+        if (step.stepNumber !== i + 1) {
+            await db
+                .update(recipeInstructions)
+                .set({ stepNumber: i + 1 })
+                .where(eq(recipeInstructions.id, step.id));
+        }
+    }
+    return deletedStepNumber;
 }

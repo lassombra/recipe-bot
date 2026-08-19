@@ -12,7 +12,7 @@ import type { APIResponder } from '../../server.js';
 import { buildContainerMessage, buildRecipeCard, buildRecipeSearchResultsMessage, buildStartRow } from './edit/display.js';
 import { findRecipesForGuildPrefix, getRecipeForGuild } from './edit/data.js';
 import { EditRecipeModal, NewRecipeModal, StepModal } from './edit/modalHandlers.js';
-import { AddStepRecipeButton, EditStepRecipeButton, FinishRecipeButton, MoreRecipeResultsButton, NewRecipeButton, OpenEditRecipeModalButton } from './edit/buttonHandlers.js';
+import { AddStepRecipeButton, DeleteStepButton, EditStepRecipeButton, FinishRecipeButton, MoreRecipeResultsButton, NewRecipeButton, OpenEditRecipeModalButton } from './edit/buttonHandlers.js';
 
 const RECIPE_SEARCH_PAGE_SIZE = 25;
 
@@ -73,6 +73,7 @@ export class EditRecipe extends Command {
             new MoreRecipeResultsButton(),
             new FinishRecipeButton(),
             new EditStepRecipeButton(),
+            new DeleteStepButton(),
         ]);
         this.registerModals([
             new EditRecipeModal(),

@@ -117,9 +117,9 @@ export function buildRecipeCard(recipe: RecipeCardData) {
     );
 
     const description = recipe.description?.trim() ? recipe.description : 'No description provided.';
-    const steps = recipe.steps.map((step, index) => new SectionBuilder()
+    const steps = recipe.steps.map((step) => new SectionBuilder()
         .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(`Step ${index + 1}: ${step.instruction}`)
+            new TextDisplayBuilder().setContent(`Step ${step.stepNumber}: ${step.instruction}`)
         ).setButtonAccessory(
             new ButtonBuilder()
                 .setCustomId(`${EditRecipeCustomId.EditStepButton}:${recipe.id}~${step.id}`)
@@ -151,17 +151,27 @@ export function buildStepCard(step: RecipeStepData) {
                 ))
             }
             container.addSeparatorComponents(new SeparatorBuilder().setDivider(false));
-            container.addTextDisplayComponents(new TextDisplayBuilder().setContent(step.instruction));
+            container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${step.stepNumber}. ${step.instruction}`));
+            const nextStepButton = step.nextStepId
+                ? new ButtonBuilder()
+                    .setCustomId(`${EditRecipeCustomId.EditStepButton}:${step.recipeId}~${step.nextStepId}`)
+                    .setLabel('Next Step')
+                    .setStyle(ButtonStyle.Primary)
+                : new ButtonBuilder()
+                    .setCustomId(`${EditRecipeCustomId.AddStepButtonPrefix}:${step.recipeId}`)
+                    .setLabel('Next Step')
+                    .setStyle(ButtonStyle.Primary);
             container.addActionRowComponents(
                 new ActionRowBuilder<ButtonBuilder>().addComponents(
                     new ButtonBuilder()
                         .setCustomId(`${EditRecipeCustomId.EditButton}:${step.recipeId}`)
                         .setLabel('Back To Recipe')
                         .setStyle(ButtonStyle.Secondary),
+                    nextStepButton,
                     new ButtonBuilder()
-                        .setCustomId(`${EditRecipeCustomId.AddStepButtonPrefix}:${step.recipeId}`)
-                        .setLabel('Next Step')
-                        .setStyle(ButtonStyle.Primary),
+                        .setCustomId(`${EditRecipeCustomId.DeleteStepButton}:${step.recipeId}~${step.id}`)
+                        .setLabel('Delete Step')
+                        .setStyle(ButtonStyle.Danger),
                 )
             );
         }
